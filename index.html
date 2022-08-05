@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Шеннон-Фано</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="title">Алгоритм Шеннона-Фано</div>
+        <div class="input-group">
+            <input type="text" id="input" value="Хто хоче – шукає можливості, хто не хоче – шукає причини.">
+            <button id="button">ОК</button>
+        </div>
+
+        <div class="ABC">
+            <table>
+                <tr>
+                    <th>Символ</th>
+                    <th>Частота</th>
+                    <th>Імовірність</th>
+                    <th>Інформація</th>
+                    <th>Біт</th>
+                </tr>
+            </table>
+        </div>
+
+        <div class="calculations">
+            <div class="entropy"></div>
+            <div class="length"></div>
+            <div class="efficiency"></div>
+            <div class="compression"></div>
+        </div>
+
+        <div id="encode"></div>
+        <div id="decode"></div>
+    </div>
+
+    <script>
+        function Node(symbols, left, right) {
+            this.symbols = symbols
+            this.left = left
+            this.right = right
+        }
+
+        Node.prototype = {
+            calcSlice(symbols) {
+                let total = symbols.reduce((prev, curr) => {
+                    return prev + curr.probability
+                }, 0)
+
+                let halfTotal = total / 2
+                let i = 1
+                let sum = symbols[0].probability
+
+                for (i; sum + symbols[i].probability <= halfTotal.toFixed(2); i++) {
+                    sum += symbols[i].probability
+                }
+
+                return i
+            },
+            insert(symbols) {
+                this.leftInsert(symbols)
+                this.rightInsert(symbols)
+            },
+            leftInsert(symbols) {
+                let slice = this.calcSlice(symbols)
+                let halfSymbols = symbols.slice(0, slice)
+                this.left = new Node(halfSymbols, null, null)
+                if (halfSymbols.length > 1) {
+                    this.left.insert(halfSymbols)
+                }
+            },
+            rightInsert(symbols) {
+                let slice = this.calcSlice(symbols)
+                let halfSymbols = symbols.slice(slice, symbols.length)
+                this.right = new Node(halfSymbols, null, null)
+                if (halfSymbols.length > 1) {
+                    this.right.insert(halfSymbols)
+                }
+            },
+        }
+
+        function Tree() {
+            this.main = null
+        }
+
+        function Symbol(name, frequency, probability, information, bits) {
+            this.name = name
+            this.frequency = frequency
+            this.probability = probability
+            this.information = information
+            this.bits = bits
+        }
+
+        function ShannonFano(str) {
+            this.symbols = [...str]
+        }
+
+        ShannonFano.prototype = {
+            frequencies() {
+                let arr = []
+                let obj = this.symbols.reduce((prev, curr) => {
+                    prev[curr] ? prev[curr]++ : prev[curr] = 1
+                    return prev
+                }, {})
+
+                for (let key in obj) {
+                    arr.push(new Symbol(key, obj[key], null, null, null))
+                }
+
+                return arr
+            },
+            probability() {
+                return this.frequencies().map(symbol => {
+                    return new Symbol(
+                        symbol.name,
+                        symbol.frequency,
+                        symbol.frequency / this.symbols.length,
+                        symbol.information,
+                        symbol.bits,
+                    )
+                })
+            },
+            informationOnSymbol() {
+                return this.probability().map(symbol => {
+                    return new Symbol(
+                        symbol.name,
+                        symbol.frequency,
+                        symbol.probability,
+                        - (Math.log(symbol.probability) / Math.log(2)),
+                        symbol.bits,
+                    )
+                })
+            },
+            sort() {
+                return this.informationOnSymbol().sort((a ,b) => b.probability - a.probability)
+            },
+            createTree() {
+                let tree = new Tree()
+
+                tree.main = new Node(this.sort(), null, null)
+                tree.main.insert(this.sort())
+
+                return tree
+            },
+            getBit(node, symbols, code = '') {
+                if(node.left != null) {
+                    this.getBit(node.left, symbols, code + '0')
+                }
+                if(node.right != null) {
+                    this.getBit(node.right, symbols, code + '1')
+                }
+                if(node.left == null && node.right == null) {
+                    symbols.push({...node.symbols.pop(), bits:code})
+                }
+            },
+            shannonFano() {
+                let tree = this.createTree()
+
+                let symbols = []
+
+                this.getBit(tree.main, symbols)
+
+                return symbols
+            },
+            entropy() {
+                return this.shannonFano().reduce((prev, curr) => {
+                    return prev + (- (curr.probability) * (Math.log(curr.probability) / Math.log(2)))
+                }, 0)
+            },
+            length() {
+                return this.shannonFano().reduce((prev, curr) => {
+                    return prev + (curr.probability) * curr.bits.length
+                }, 0)
+            },
+            efficiency() {
+                return this.entropy() / (this.length() * (Math.log(2) / Math.log(2)))
+            },
+            compression() {
+                return (Math.log(this.shannonFano().length) / Math.log(2)) / (this.length() * (Math.log(2) / Math.log(2)))
+            },
+            encode() {
+                return this.symbols.map(symbol =>
+                    this.shannonFano().filter(s => s.name === symbol)[0].bits
+                ).join(' ')
+            },
+            decode() {
+                return this.encode().split(' ').map(bits =>
+                    this.shannonFano().filter(s => s.bits === bits)[0].name
+                ).join('')
+            },
+        }
+
+        let input = document.getElementById('input')
+        let button = document.getElementById('button')
+
+        let ABC = document.querySelector('.ABC')
+        let table = ABC.querySelector('table')
+        let duplicateTable = table.cloneNode(true)
+
+        let calculations = document.querySelector('.calculations')
+        let entropy = document.querySelector('.entropy')
+        let length = document.querySelector('.length')
+        let efficiency = document.querySelector('.efficiency')
+        let compression = document.querySelector('.compression')
+
+        let encode = document.getElementById('encode')
+        let decode = document.getElementById('decode')
+
+
+        button.addEventListener('click', function () {
+            let SF = new ShannonFano(input.value)
+
+            ABC.classList.add('active')
+            table.parentNode.replaceChild(duplicateTable.cloneNode(true), table)
+            table = document.querySelector('table')
+            SF.shannonFano().forEach(symbol => {
+                let tr = document.createElement('tr'), td
+
+                td = document.createElement('td')
+                td.innerText = '\'' + symbol.name + '\''
+                tr.appendChild(td)
+
+                td = document.createElement('td')
+                td.innerText = symbol.frequency
+                tr.appendChild(td)
+
+                td = document.createElement('td')
+                td.innerText = symbol.probability.toFixed(2)
+                tr.appendChild(td)
+
+                td = document.createElement('td')
+                td.innerText = symbol.information.toFixed(2)
+                tr.appendChild(td)
+
+                td = document.createElement('td')
+                td.innerText = symbol.bits
+                tr.appendChild(td)
+
+                table.appendChild(tr)
+            })
+
+            calculations.classList.add('active')
+            entropy.innerHTML = 'H = ' + SF.entropy().toFixed(2)
+            length.innerHTML = 'l = ' + SF.length().toFixed(2)
+            efficiency.innerHTML = 'eta = ' + SF.efficiency().toFixed(2)
+            compression.innerHTML = 'Rc = ' + SF.compression().toFixed(2)
+
+            encode.innerHTML = `<div class="encode-title">Кодований текст</div>
+                                <div class="encode-text">` + SF.encode() + `</div>`
+            encode.classList.add('active')
+            decode.innerHTML = `<div class="decode-title">Декодований текст</div>
+                                <div class="decode-text">` + SF.decode() + `</div>`
+            decode.classList.add('active')
+        })
+    </script>
+</body>
+</html>
